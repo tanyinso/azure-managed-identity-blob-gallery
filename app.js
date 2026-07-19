@@ -1,80 +1,200 @@
-const express = require('express');
-const multer = require('multer');
-const { DefaultAzureCredential } = require('@azure/identity');
-const { BlobServiceClient } = require('@azure/storage-blob');
+import 'dotenv/config';
+
+import express from "express";
+import multer from "multer";
+
+import {
+    DefaultAzureCredential
+} from "@azure/identity";
+
+import {
+    BlobServiceClient
+} from "@azure/storage-blob";
+
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
-app.set('view engine', 'ejs');
-app.use(express.static('public'));
 
-// Hardcoded directly — no .env, no App Service app settings needed.
-// Neither of these is a secret, so this is safe: managed identity means
-// there's no key or password to protect in the first place.
-const STORAGE_ACCOUNT = 'stmilabbright123';
-const CONTAINER_NAME = 'lab-data';
 
-const accountUrl = `https://${STORAGE_ACCOUNT}.blob.core.windows.net`;
-const container = CONTAINER_NAME;
-
-// PORT is the one exception — this must stay dynamic. Azure App Service
-// assigns its own port at runtime and injects it via process.env.PORT;
-// hardcoding this would break the deployment.
-const port = process.env.PORT || 3000;
-
-const svc = new BlobServiceClient(accountUrl, new DefaultAzureCredential());
-
-app.get('/', async (req, res) => {
-  try {
-    const cc = svc.getContainerClient(container);
-    const imgs = [];
-    for await (const b of cc.listBlobsFlat()) imgs.push(b.name);
-    res.render('index', { imgs });
-  } catch (err) {
-    console.error('Failed to list blobs:', err.message);
-    res.status(500).send('Could not load gallery — check the server console.');
-  }
+const upload = multer({
+    storage: multer.memoryStorage()
 });
 
-app.post('/upload', upload.single('image'), async (req, res) => {
-  try {
-    const cc = svc.getContainerClient(container);
-    await cc.getBlockBlobClient(req.file.originalname).uploadData(req.file.buffer);
-    console.log(`Uploaded: ${req.file.originalname}`);
-    res.redirect('/');
-  } catch (err) {
-    console.error('Upload failed:', err.message);
-    res.status(500).send('Upload failed — check the server console.');
-  }
+
+app.set("view engine","ejs");
+
+app.use(express.static("public"));
+
+
+
+const storageAccount =
+process.env.STORAGE_ACCOUNT;
+
+
+const containerName =
+process.env.CONTAINER_NAME;
+
+
+
+console.log("Storage:",storageAccount);
+console.log("Container:",containerName);
+
+
+
+const credential =
+new DefaultAzureCredential();
+
+
+
+const blobServiceClient =
+new BlobServiceClient(
+`https://${storageAccount}.blob.core.windows.net`,
+credential
+);
+
+
+
+const containerClient =
+blobServiceClient.getContainerClient(containerName);
+
+
+
+
+
+// Home page
+
+app.get("/",async(req,res)=>{
+
+
+    let images=[];
+
+
+    for await(
+        const blob of containerClient.listBlobsFlat()
+    ){
+
+        images.push(blob.name);
+
+    }
+
+
+    res.render("index",{
+        images
+    });
+
+
 });
 
-app.get('/image/:name', async (req, res) => {
-  try {
-    const dl = await svc.getContainerClient(container).getBlobClient(req.params.name).download();
-    res.setHeader('Content-Type', dl.contentType || 'application/octet-stream');
-    dl.readableStreamBody.pipe(res);
-  } catch (err) {
-    console.error(`Failed to fetch image "${req.params.name}":`, err.message);
-    res.status(404).send('Image not found.');
-  }
+
+
+
+
+// Upload image
+
+app.post(
+"/upload",
+upload.single("image"),
+async(req,res)=>{
+
+
+    const blobClient =
+    containerClient.getBlockBlobClient(
+        req.file.originalname
+    );
+
+
+
+    await blobClient.uploadData(
+        req.file.buffer,
+        {
+
+            blobHTTPHeaders:{
+                blobContentType:req.file.mimetype
+            }
+
+        }
+    );
+
+
+    res.redirect("/");
+
 });
 
-app.post('/delete/:name', async (req, res) => {
-  try {
-    await svc.getContainerClient(container).deleteBlob(req.params.name);
-    console.log(`Deleted: ${req.params.name}`);
-    res.redirect('/');
-  } catch (err) {
-    console.error(`Failed to delete "${req.params.name}":`, err.message);
-    res.status(500).send('Delete failed — check the server console.');
-  }
+
+
+
+
+// Display image
+
+
+app.get(
+"/image/:name",
+async(req,res)=>{
+
+
+    const blobClient =
+    containerClient.getBlobClient(
+        req.params.name
+    );
+
+
+    const properties =
+    await blobClient.getProperties();
+
+
+
+    const download =
+    await blobClient.download();
+
+
+
+    res.setHeader(
+        "Content-Type",
+        properties.contentType
+    );
+
+
+    download.readableStreamBody.pipe(res);
+
+
 });
 
-app.listen(port, () => {
-  console.log('');
-  console.log('Blob Gallery server is running');
-  console.log(`  URL:              http://localhost:${port}`);
-  console.log(`  Storage account:  ${accountUrl}`);
-  console.log(`  Container:        ${container}`);
-  console.log('');
+
+
+
+
+// Delete image
+
+
+app.post(
+"/delete/:name",
+async(req,res)=>{
+
+
+    await containerClient
+    .deleteBlob(req.params.name);
+
+
+
+    res.redirect("/");
+
+
+});
+
+
+
+
+
+
+
+const PORT =
+process.env.PORT || 3000;
+
+
+
+app.listen(PORT,()=>{
+
+console.log(
+`Running on http://localhost:${PORT}`
+);
+
 });
