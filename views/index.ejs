@@ -1,0 +1,9 @@
+<!doctype html><html><head><link rel='stylesheet' href='/style.css'></head><body>
+<h1>Azure Blob Gallery</h1>
+<form action='/upload' method='post' enctype='multipart/form-data'>
+<input type='file' name='image' required><button>Upload</button></form><hr>
+<% imgs.forEach(i=>{ %>
+<div class='card'>
+<img src='/image/<%= encodeURIComponent(i)%>'><p><%=i%></p>
+<form action='/delete/<%= encodeURIComponent(i)%>' method='post'><button>Delete</button></form>
+</div><%})%></body></html>
