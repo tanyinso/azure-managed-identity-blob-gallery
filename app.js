@@ -1,5 +1,3 @@
-require('dotenv').config();
-
 const express = require('express');
 const multer = require('multer');
 const { DefaultAzureCredential } = require('@azure/identity');
@@ -10,34 +8,19 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.set('view engine', 'ejs');
 app.use(express.static('public'));
 
-// Accepts either a bare account name ("stmilabbright123")
-// or a full blob endpoint URL ("https://stmilabbright123.blob.core.windows.net")
-function resolveAccountUrl(value) {
-  if (!value) return null;
-  return value.startsWith('http')
-    ? value.replace(/\/+$/, '')
-    : `https://${value}.blob.core.windows.net`;
-}
+// Hardcoded directly — no .env, no App Service app settings needed.
+// Neither of these is a secret, so this is safe: managed identity means
+// there's no key or password to protect in the first place.
+const STORAGE_ACCOUNT = 'stmilabbright123';
+const CONTAINER_NAME = 'lab-data';
 
-// Accepts either a bare container name ("lab-data")
-// or a full blob URL ("https://.../lab-data")
-function resolveContainerName(value) {
-  if (!value) return 'gallery';
-  if (value.startsWith('http')) {
-    const parts = value.replace(/\/+$/, '').split('/');
-    return parts[parts.length - 1];
-  }
-  return value;
-}
+const accountUrl = `https://${STORAGE_ACCOUNT}.blob.core.windows.net`;
+const container = CONTAINER_NAME;
 
-const accountUrl = resolveAccountUrl(process.env.STORAGE_ACCOUNT);
-const container = resolveContainerName(process.env.CONTAINER_NAME);
+// PORT is the one exception — this must stay dynamic. Azure App Service
+// assigns its own port at runtime and injects it via process.env.PORT;
+// hardcoding this would break the deployment.
 const port = process.env.PORT || 3000;
-
-if (!accountUrl) {
-  console.error('Missing STORAGE_ACCOUNT in .env — set it to your account name or full blob endpoint URL.');
-  process.exit(1);
-}
 
 const svc = new BlobServiceClient(accountUrl, new DefaultAzureCredential());
 
